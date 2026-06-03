@@ -15,5 +15,10 @@ void setup() {
 }
 
 void loop() {
-    // Nothing needed here
-}
+    myServo.write(90);   // Set servo to 90 degrees
+    delay(1000);
+    myServo.write(180);   // Set servo to 90 degrees
+    delay(1000);
+    myServo.write(90);   // Set servo to 90 degrees}
+
+
