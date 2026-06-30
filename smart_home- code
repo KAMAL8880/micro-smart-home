@@ -318,3 +318,84 @@ static uint8_t spi_xfer(uint8_t d)
 }
 
 
+
+
+/* ============================================================
+ * BACKGROUND TASKS (PIR, Rain, LED Heartbeat)
+ * Unified function so background execution can run anywhere!
+ * ============================================================ */
+static void update_background_systems(void)
+{
+    /* -- PIR MOTION SENSOR (PA2) -> LED (PB9) -- */
+    uint8_t motion = (GPIOA->IDR >> 2) & 1; /* HIGH = motion */
+    if (motion) {
+        GPIOB->BSRR = (1U << 9);    /* LED ON */
+    } else {
+        GPIOB->BRR  = (1U << 9);    /* LED OFF */
+    }
+
+    /* -- RAIN SENSOR digital (PA5) -> BUZZER (PA9) -- */
+    uint8_t is_raining = !((GPIOA->IDR >> 5) & 1); /* LOW = wet */
+    if (is_raining) GPIOA->BSRR = (1U << 9);       /* Buzzer ON */
+    else            GPIOA->BRR  = (1U << 9);       /* Buzzer OFF */
+
+    /* -- RAIN analog read (PA6) every 50 ticks -- */
+    if (system_ticks % 50 == 0) {
+        rain_analog_val = adc_read_rain();
+    }
+
+    /* -- Heartbeat LED PC13 (faster blink when raining) -- */
+    uint32_t blink_rate = is_raining ? 50 : 200;
+    if (system_ticks % blink_rate == 0) {
+        led_state ^= 1;
+        if (led_state) GPIOC->ODR &= ~(1U << 13);
+        else           GPIOC->ODR |=  (1U << 13);
+    }
+}
+
+/* Non-blocking wrapper for delays that updates sensors while idling */
+static void managed_delay_ms(uint32_t ms)
+{
+    for(uint32_t i = 0; i < ms; i++) {
+        delay_ms(1);
+        system_ticks++;
+        update_background_systems();
+    }
+}
+
+/* ============================================================
+ * SCREENS
+ * ============================================================ */
+static void scr_menu(void)
+{
+    lcd_cls();
+    lcd_pos(0,0); lcd_str(" 1:PIN  2:CARD  ");
+    lcd_pos(1,0); lcd_str(" Choose method: ");
+}
+
+static void scr_open(void)
+{
+    lcd_cls();
+    lcd_pos(0,0); lcd_str("    WELCOME :)  ");
+    lcd_pos(1,0); lcd_str("    DOOR OPEN   ");
+    servo_set_angle(SERVO_OPEN);
+    managed_delay_ms(4000);
+    servo_set_angle(SERVO_REST);
+    scr_menu();
+}
+
+static void scr_wrong(void)
+{
+    lcd_cls();
+    lcd_pos(0,0); lcd_str("   WRONG PIN!   ");
+    lcd_pos(1,0); lcd_str("   TRY AGAIN    ");
+    managed_delay_ms(2000);
+    scr_menu();
+}
+
+static void scr_card_fail(void)
+{
+    lcd_cls();
+    lcd_pos(0,0); lcd_str(" CARD NOT FOUND ");
+    lcd_pos(1,0); lcd_str(" * to go back   ");
+}
