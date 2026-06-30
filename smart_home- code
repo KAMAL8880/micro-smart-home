@@ -1,1 +1,105 @@
 
+
+/* ============================================================
+ * MAIN
+ * ============================================================ */
+int main(void)
+{
+    /* Enable clocks: GPIOA, GPIOB, GPIOC, AFIO */
+    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN
+                  | RCC_APB2ENR_IOPCEN  | RCC_APB2ENR_AFIOEN;
+
+    /* Disable JTAG to free PB3/PB4/PA15 */
+    AFIO->MAPR &= ~AFIO_MAPR_SWJ_CFG;
+    AFIO->MAPR |=  AFIO_MAPR_SWJ_CFG_JTAGDISABLE;
+
+    /* ====================================================
+     * GPIOA CRL  (PA0 .. PA7)
+     * ==================================================== */
+    GPIOA->CRL = (0x4U <<  0)   /* PA0 float */
+               | (0x4U <<  4)   /* PA1 float */
+               | (0x4U <<  8)   /* PA2 PIR   */
+               | (0x4U << 12)   /* PA3 float */
+               | (0x4U << 16)   /* PA4 float */
+               | (0x8U << 20)   /* PA5 rain D0 pull-up */
+               | (0x0U << 24)   /* PA6 rain A0 analog  */
+               | (0x4U << 28);  /* PA7 float */
+    GPIOA->ODR |= (1U << 5);    /* PA5 pull-up enable  */
+
+    /* ====================================================
+     * GPIOA CRH  (PA8 .. PA15)
+     * ==================================================== */
+    GPIOA->CRH = (0x3U <<  0)   /* PA8  CS      */
+               | (0x3U <<  4)   /* PA9  Buzzer  */
+               | (0x3U <<  8)   /* PA10 ROW0    */
+               | (0x3U << 12)   /* PA11 ROW1    */
+               | (0x3U << 16)   /* PA12 ROW2    */
+               | (0x4U << 20)   /* PA13 SWDIO - float */
+               | (0x4U << 24)   /* PA14 SWCLK - float */
+               | (0x3U << 28);  /* PA15 ROW3    */
+
+    /* Keypad rows idle HIGH, CS idle HIGH, Buzzer idle LOW */
+    GPIOA->ODR |= (1U<<8)|(1U<<10)|(1U<<11)|(1U<<12)|(1U<<15);
+    GPIOA->BRR  = (1U<<9);      /* Buzzer OFF */
+
+    /* ====================================================
+     * GPIOB CRL  (PB0 .. PB7)
+     * ==================================================== */
+    GPIOB->CRL = (0x4U <<  0)   /* PB0 float */
+               | (0x4U <<  4)   /* PB1 float */
+               | (0x4U <<  8)   /* PB2 float */
+               | (0x8U << 12)   /* PB3 COL0 pull-up */
+               | (0x8U << 16)   /* PB4 COL1 pull-up */
+               | (0x8U << 20)   /* PB5 COL2 pull-up */
+               | (0x4U << 24)   /* PB6 float */
+               | (0xBU << 28);  /* PB7 TIM4 CH2 AF PP */
+    GPIOB->ODR |= (1U<<3)|(1U<<4)|(1U<<5); /* col pull-ups enable */
+
+    /* ====================================================
+     * GPIOB CRH  (PB8 .. PB15)
+     * ==================================================== */
+    GPIOB->CRH = (0x4U <<  0)   /* PB8  float      */
+               | (0x3U <<  4)   /* PB9  PIR LED     */
+               | (0xFU <<  8)   /* PB10 I2C2 SCL    */
+               | (0xFU << 12)   /* PB11 I2C2 SDA    */
+               | (0x4U << 16)   /* PB12 float       */
+               | (0xBU << 20)   /* PB13 SPI2 SCK    */
+               | (0x4U << 24)   /* PB14 SPI2 MISO   */
+               | (0xBU << 28);  /* PB15 SPI2 MOSI   */
+    GPIOB->BRR = (1U << 9);     /* PIR LED starts OFF */
+
+    /* ====================================================
+     * GPIOC CRH  (PC13 = heartbeat LED, active LOW)
+     * ==================================================== */
+    GPIOC->CRH &= ~(0xFU << 20);
+    GPIOC->CRH |=  (0x2U << 20); /* PC13 output 2MHz PP */
+    GPIOC->ODR |=  (1U << 13);   /* LED off (active low) */
+
+    /* ====================================================
+     * Initialize Peripherals
+     * ==================================================== */
+    i2c_init();
+    delay_ms(200);
+    lcd_init();
+    spi_init();
+    rc_init();
+    servo_init();
+    adc_init();
+
+    scr_menu();
+
+    /* ====================================================
+     * MAIN LOOP
+     * ==================================================== */
+    while(1)
+    {
+        managed_delay_ms(1); /* Updates system_ticks, PIR, and Rain sensors */
+
+        /* -- Keypad top-level menu -- */
+        char key = kp_scan();
+        if (!key) continue;
+
+        if      (key == '1') { mode_pin();  scr_menu(); }
+        else if (key == '2') { mode_card(); scr_menu(); }
+    }
+}
